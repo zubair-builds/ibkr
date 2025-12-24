@@ -1,0 +1,6 @@
+ib-insync
+python-dotenv
+PyYAML
+fastapi
+uvicorn[standard]
+websockets
