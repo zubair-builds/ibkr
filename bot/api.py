@@ -1,16 +1,13 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from ib_insync import IB
-import asyncio
-from pydantic import BaseModel
-from bot.orders import place_market_order
+import logging
 
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from bot.ib_service import HistoricalDataError, IBService, PacingLimitError
+
+logger = logging.getLogger(__name__)
 app = FastAPI(title="IBKR Bot API")
 
-class TradeRequest(BaseModel):
-    symbol: str
-    action: str
-    quantity: float
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -21,143 +18,161 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global IB instance (injected from main.py)
-ib_instance: IB = None
-reconnect_requested: asyncio.Event = None
 
-def set_ib_instance(ib: IB):
-    global ib_instance
-    ib_instance = ib
+def get_ib_service(request: Request) -> IBService:
+    """
+    FastAPI dependency to retrieve the single IBService instance
+    attached to the application state in main.py.
+    """
+    ib_service = getattr(request.app.state, "ib_service", None)
+    if ib_service is None:
+        raise HTTPException(status_code=500, detail="IB service not initialized")
+    return ib_service
 
-def set_reconnect_event(event):
-    global reconnect_requested
-    reconnect_requested = event
 
 @app.get("/health")
-async def health_check():
-    if not ib_instance:
-        return {"status": "disconnected", "operational": False}
-
-    status = "disconnected"
-    operational = False
-    details = {}
-    accounts = []
-
-    if ib_instance.isConnected():
-        status = "connected" # Socket connected
-        try:
-            # Check for authentication/data via managedAccounts
-            accounts = ib_instance.managedAccounts
-            if not accounts:
-                status = "connected_no_accounts"
-            else:
-                operational = True
-            
-            # Get server version if possible (verifies protocol)
-            details["server_version"] = ib_instance.client.serverVersion()
-            details["host"] = ib_instance.client.host
-            details["port"] = ib_instance.client.port
-            details["client_id"] = ib_instance.client.clientId
-            
-        except Exception as e:
-            status = "error"
-            details["error"] = str(e)
-    
-    return {
-        "status": status,
-        "operational": operational,
-        "connection": details,
-        "accounts": accounts
-    }
+async def health_check(ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.health()
 
 
 @app.post("/connect")
-async def connect_ib():
-    if not ib_instance:
-        raise HTTPException(status_code=500, detail="IB instance not initialized")
-    
-    if ib_instance.isConnected():
-         return {"status": "already_connected", "message": "Bot is already connected"}
+async def connect_ib(ib_service: IBService = Depends(get_ib_service)):
+    # Preserve legacy semantics as closely as possible.
+    health = ib_service.health()
+    if health.get("status") == "connected" and health.get("operational"):
+        return {"status": "already_connected", "message": "Bot is already connected"}
 
-    if reconnect_requested:
-        reconnect_requested.set()
-        return {"status": "success", "message": "Reconnection requested"}
-    
-    return {"status": "error", "message": "Reconnection mechanism not initialized"}
+    ib_service.request_reconnect()
+    return {"status": "success", "message": "Reconnection requested"}
 
-@app.post("/trade")
-async def place_trade(trade: TradeRequest):
-    if not ib_instance or not ib_instance.isConnected():
-        raise HTTPException(status_code=503, detail="Bot not connected")
-    
-    try:
-        # We can implement basic checks here (e.g. qty limit)
-        # For now, directly place market order
-        ib_trade = place_market_order(ib_instance, trade.symbol, trade.action, trade.quantity)
-        
-        return {
-            "status": "submitted",
-            "order_id": ib_trade.order.orderId,
-            "symbol": trade.symbol,
-            "action": trade.action,
-            "quantity": trade.quantity
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/account")
-async def get_account_summary():
-    if not ib_instance or not ib_instance.isConnected():
-        raise HTTPException(status_code=503, detail="Bot not connected to IBKR")
-    
-    # Fetch account values
-    # In live/paper, accountValues() returns a list of AccountValue objects
-    # We'll filter for key metrics
+async def get_account_summary(ib_service: IBService = Depends(get_ib_service)):
     try:
-        # PnL seems more useful for realtime status if available, 
-        # allowing for fallback to basic account Summary
-        summary = {}
-        for tag in ['NetLiquidation', 'TotalCashValue', 'UnrealizedPnL', 'RealizedPnL', 'BuyingPower']:
-             vals = [v for v in ib_instance.accountValues() if v.tag == tag and v.currency == 'USD']
-             if vals:
-                 summary[tag] = vals[0].value
-        
+        summary = ib_service.get_account_summary()
         return summary
-    except Exception as e:
-        return {"error": str(e)}
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
 
 @app.get("/orders")
-async def get_orders():
-    if not ib_instance:
-        return []
-    
-    # trades() returns a list of Trade objects which contain contract, order, status etc.
-    trades = ib_instance.trades()
-    result = []
-    for t in trades:
-        result.append({
-            "ticker": t.contract.symbol,
-            "action": t.order.action,
-            "quantity": t.order.totalQuantity,
-            "status": t.orderStatus.status,
-            "filled": t.orderStatus.filled,
-            "remaining": t.orderStatus.remaining,
-            "avgFillPrice": t.orderStatus.avgFillPrice,
-            "lastUpdateTime": t.log[-1].time.strftime("%H:%M:%S") if t.log else ""
-        })
-    return result
+async def get_orders(ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.get_orders()
+
 
 @app.get("/positions")
-async def get_positions():
-    if not ib_instance:
-        return []
-    
-    positions = ib_instance.positions()
-    result = []
-    for p in positions:
-        result.append({
-            "ticker": p.contract.symbol,
-            "position": p.position,
-            "avgCost": p.avgCost
-        })
-    return result
+async def get_positions(ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.get_positions()
+
+
+@app.get("/quote")
+def get_quote(symbol: str, ib_service: IBService = Depends(get_ib_service)):
+    """
+    Return a simple quote snapshot for the requested symbol.
+    """
+    if not symbol:
+        logger.warning("GET /quote: missing symbol parameter")
+        raise HTTPException(status_code=400, detail="Query parameter 'symbol' is required")
+
+    try:
+        quote = ib_service.get_quote(symbol)
+        if isinstance(quote, dict) and quote.get("error"):
+            logger.warning("GET /quote symbol=%s: %s", symbol, quote["error"])
+            raise HTTPException(status_code=500, detail=quote["error"])
+        logger.info("GET /quote symbol=%s: 200 OK", symbol)
+        return quote
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        logger.warning("GET /quote symbol=%s: 503 %s", symbol, e)
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        logger.warning("GET /quote symbol=%s: 400 %s", symbol, e)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("GET /quote symbol=%s: 500 %s", symbol, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/historical")
+def get_historical(
+    symbol: str,
+    duration: str = "1 M",
+    bar_size: str = "1 day",
+    what_to_show: str = "TRADES",
+    use_rth: bool = True,
+    end_datetime: str = "",
+    primary_exchange: str = "",
+    ib_service: IBService = Depends(get_ib_service),
+):
+    """
+    Get historical market data for a symbol.
+
+    Args:
+        symbol: Stock symbol (e.g., AAPL)
+        duration: How far back to fetch (e.g., "1 M", "1 Y", "5 D")
+        bar_size: Bar size (e.g., "1 day", "1 hour", "5 mins")
+        what_to_show: TRADES (default, no dividends), ADJUSTED_LAST
+            (split+dividend adjusted -- requires end_datetime blank),
+            MIDPOINT, BID, ASK, BID_ASK, etc.
+        use_rth: Regular trading hours only (default True).
+        end_datetime: IB datetime string for the end of the window, or
+            blank (default) for "now". Required blank for ADJUSTED_LAST.
+        primary_exchange: Disambiguates SMART-routed symbols listed on
+            multiple exchanges.
+
+    Returns {"bars": [...], "meta": {...}} -- never a bare 200 with an
+    empty list; IB reporting zero bars is surfaced as a 502 instead.
+    """
+    if not symbol:
+        logger.warning("GET /historical: missing symbol parameter")
+        raise HTTPException(status_code=400, detail="Query parameter 'symbol' is required")
+
+    try:
+        data = ib_service.get_historical_data(
+            symbol,
+            duration,
+            bar_size,
+            what_to_show=what_to_show,
+            use_rth=use_rth,
+            end_datetime=end_datetime,
+            primary_exchange=primary_exchange,
+        )
+        logger.info(
+            "GET /historical symbol=%s duration=%s bar_size=%s what_to_show=%s: 200 OK (%d bars)",
+            symbol, duration, bar_size, what_to_show, data["meta"]["bar_count"],
+        )
+        return data
+    except HTTPException:
+        raise
+    except PacingLimitError as e:
+        logger.warning("GET /historical symbol=%s: 429 %s", symbol, e)
+        retry_after = max(1, int(e.retry_after) + 1)
+        raise HTTPException(status_code=429, detail=str(e), headers={"Retry-After": str(retry_after)})
+    except HistoricalDataError as e:
+        logger.warning("GET /historical symbol=%s: 502 %s (ib_error_code=%s)", symbol, e, e.ib_error_code)
+        raise HTTPException(status_code=502, detail={"error": str(e), "ib_error_code": e.ib_error_code})
+    except RuntimeError as e:
+        logger.warning("GET /historical symbol=%s: 503 %s", symbol, e)
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        logger.warning("GET /historical symbol=%s: 400 %s", symbol, e)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("GET /historical symbol=%s: 500 %s", symbol, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/watchlist")
+def get_watchlist(ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.get_watchlist()
+
+
+@app.post("/watchlist")
+def add_to_watchlist(symbol: str, ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.add_to_watchlist(symbol)
+
+
+@app.delete("/watchlist/{symbol}")
+def remove_from_watchlist(symbol: str, ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.remove_from_watchlist(symbol)

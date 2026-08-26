@@ -9,19 +9,29 @@
   --glass: rgba(26, 29, 45, 0.7);
 }
 
+html,
 body {
   margin: 0;
+  width: 100%;
+  min-height: 100vh;
+  display: block;
   background-color: var(--bg-dark);
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
+#root {
+  width: 100%;
+}
+
 .dashboard-container {
-  max-width: 1200px;
+  max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -42,13 +52,36 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
 
-/* .status-badge removed */
+.btn-refresh {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent-blue);
+  color: var(--bg-dark);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-refresh:hover {
+  opacity: 0.9;
+}
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
+}
+
+.portfolio-section {
+  width: 100%;
 }
 
 .card {
@@ -95,11 +128,13 @@ body {
   color: #fff;
 }
 
-.stat-value.positive {
+.stat-value.positive,
+.positive {
   color: var(--accent-green);
 }
 
-.stat-value.negative {
+.stat-value.negative,
+.negative {
   color: var(--accent-red);
 }
 
@@ -156,4 +191,157 @@ body {
   color: var(--text-secondary);
   font-size: 0.8rem;
   opacity: 0.6;
+}
+
+/* Table cell P&L and numeric styling */
+.orders-table td.positive {
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+.orders-table td.negative {
+  color: var(--accent-red);
+  font-weight: 500;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.orders-card .empty-state {
+  padding: 1.25rem;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.portfolio-table-wrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 360px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.portfolio-table-wrapper .orders-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+  z-index: 1;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Portfolio table: column alignment and spacing */
+.portfolio-table .col-index {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.portfolio-table .col-symbol {
+  font-weight: 600;
+  min-width: 90px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.portfolio-table .col-num {
+  text-align: right;
+  min-width: 90px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-table th.col-num {
+  text-align: right;
+}
+
+.portfolio-table td {
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+}
+
+.portfolio-table tbody tr.row-alt {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.portfolio-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.portfolio-table .portfolio-totals-row {
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.portfolio-table .portfolio-totals-row .col-total-label {
+  text-align: right;
+  padding-right: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.portfolio-filter-input {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+  font-size: 0.85rem;
+  width: 150px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.portfolio-filter-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.portfolio-filter-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Portfolio refresh button */
+.portfolio-card .refresh-btn,
+.watchlist-card .refresh-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.portfolio-card .refresh-btn:hover,
+.watchlist-card .refresh-btn:hover {
+  color: var(--accent-blue);
+}
+
+.portfolio-card .refresh-btn:disabled,
+.watchlist-card .refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error message styling */
+.error-message {
+  padding: 1rem;
+  background: rgba(255, 77, 77, 0.1);
+  border: 1px solid rgba(255, 77, 77, 0.3);
+  border-radius: 8px;
+  color: var(--accent-red);
+  font-size: 0.9rem;
 }

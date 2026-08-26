@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { apiGet, apiPost, errorMessage } from '../api';
+import { useRefresh } from '../refresh';
 
 interface ConnectionState {
     status: 'connected' | 'disconnected' | 'connected_no_accounts' | 'error' | 'loading';
@@ -19,29 +21,45 @@ const ConnectionStatus = () => {
         operational: false
     });
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [actionMessage, setActionMessage] = useState('');
 
-    const checkConnection = async () => {
+    const { token, refreshNow } = useRefresh();
+
+    const reqId = useRef(0);
+
+    const reconnect = async () => {
         setIsRefreshing(true);
         try {
-            const res = await fetch('http://localhost:8000/health');
-            const data = await res.json();
-            setConnectionData(data);
+            const data = await apiPost<{ message?: string }>('/connect');
+            setActionMessage(data.message ?? 'Reconnection requested');
         } catch (e) {
-            setConnectionData({
-                status: 'error',
-                operational: false,
-                connection: { error: String(e) }
-            });
+            setActionMessage(`Connection failed: ${errorMessage(e)}`);
         } finally {
             setIsRefreshing(false);
+            refreshNow();
         }
     };
 
     useEffect(() => {
-        checkConnection();
-        const interval = setInterval(checkConnection, 30000); // Poll every 30s
-        return () => clearInterval(interval);
-    }, []);
+        const id = ++reqId.current;
+        setIsRefreshing(true);
+        void (async () => {
+            try {
+                const data = await apiGet<ConnectionState>('/health');
+                if (id !== reqId.current) return;
+                setConnectionData(data);
+            } catch (e) {
+                if (id !== reqId.current) return;
+                setConnectionData({
+                    status: 'error',
+                    operational: false,
+                    connection: { error: errorMessage(e) }
+                });
+            } finally {
+                if (id === reqId.current) setIsRefreshing(false);
+            }
+        })();
+    }, [token]);
 
     const getStatusText = () => {
         if (connectionData.status === 'loading') return 'Checking...';
@@ -80,7 +98,7 @@ const ConnectionStatus = () => {
             )}
 
             <button
-                onClick={checkConnection}
+                onClick={refreshNow}
                 disabled={isRefreshing}
                 style={{
                     border: 'none',
@@ -97,20 +115,7 @@ const ConnectionStatus = () => {
 
             {!connectionData.operational && connectionData.status !== 'loading' && (
                 <button
-                    onClick={async () => {
-                        setIsRefreshing(true);
-                        try {
-                            const res = await fetch('http://localhost:8000/connect', { method: 'POST' });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.detail || 'Failed to connect');
-                            alert('Connected: ' + data.message);
-                            checkConnection();
-                        } catch (e: any) {
-                            alert('Connection failed: ' + e.message);
-                        } finally {
-                            setIsRefreshing(false);
-                        }
-                    }}
+                    onClick={reconnect}
                     disabled={isRefreshing}
                     style={{
                         marginLeft: '8px',
@@ -127,7 +132,11 @@ const ConnectionStatus = () => {
                 </button>
             )}
 
-            {/* Expanded details could go here in a tooltip */}
+            {actionMessage && (
+                <span style={{ fontSize: '0.8rem', opacity: 0.8 }} title={actionMessage}>
+                    {actionMessage}
+                </span>
+            )}
         </div>
     );
 };

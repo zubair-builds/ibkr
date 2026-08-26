@@ -1,51 +1,83 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-import ConnectionStatus from './components/ConnectionStatus';
-import TradePanel from './components/TradePanel';
+import { apiGet, errorMessage } from './api';
+import { useRefresh } from './refresh';
 
-const API_BASE = 'http://localhost:8000';
+interface Order {
+  ticker: string;
+  action: string;
+  quantity: number;
+  status: string;
+  filled: number;
+  remaining: number;
+  avgFillPrice: number;
+  lastUpdateTime: string;
+}
+
+/** /account returns a flat map of IB tag -> value, both strings. */
+type AccountSummary = Record<string, string>;
+
+import ConnectionStatus from './components/ConnectionStatus';
+import HistoricalChart from './components/HistoricalChart';
+import PortfolioTable from './components/PortfolioTable';
+import Watchlist from './components/Watchlist';
 
 function App() {
-  const [account, setAccount] = useState<any>({});
-  const [orders, setOrders] = useState<any[]>([]);
+  const [account, setAccount] = useState<AccountSummary>({});
+  const [orders, setOrders] = useState<Order[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [error, setError] = useState('');
 
-  const fetchData = async () => {
-    try {
-      const statusRes = await fetch(`${API_BASE}/health`);
-      const statusData = await statusRes.json();
+  const { token, refreshNow } = useRefresh();
 
-      if (statusData.operational) {
-        const accountRes = await fetch(`${API_BASE}/account`);
-        setAccount(await accountRes.json());
-
-        const ordersRes = await fetch(`${API_BASE}/orders`);
-        setOrders(await ordersRes.json());
-      }
-      setLastUpdated(new Date());
-    } catch (e) {
-      console.error("Failed to fetch data", e);
-    }
-  };
+  // Requests can outlive the tick that started them (/account and /orders are
+  // serial, and a slow bot can push a response past the next 5s tick), so stamp
+  // each run and drop any result that a newer run has superseded.
+  const reqId = useRef(0);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 2000); // Poll every 2s
-    return () => clearInterval(interval);
-  }, []);
+    const id = ++reqId.current;
+    void (async () => {
+      try {
+        const status = await apiGet<{ operational: boolean }>('/health');
+        if (id !== reqId.current) return;
+
+        if (status.operational) {
+          const [nextAccount, nextOrders] = [
+            await apiGet<AccountSummary>('/account'),
+            await apiGet<Order[]>('/orders'),
+          ];
+          if (id !== reqId.current) return;
+          setAccount(nextAccount);
+          setOrders(nextOrders);
+        }
+        setError('');
+        setLastUpdated(new Date());
+      } catch (e) {
+        if (id !== reqId.current) return;
+        setError(errorMessage(e));
+      }
+    })();
+  }, [token]);
 
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>IBKR Bot Dashboard</h1>
-        <ConnectionStatus />
+        <div className="header-actions">
+          <button className="btn-refresh" onClick={refreshNow} title="Refresh account and orders">
+            Refresh
+          </button>
+          <ConnectionStatus />
+        </div>
       </header>
+
+      {error && <div className="error-message">{error}</div>}
 
       <main className="dashboard-grid">
         {/* Account Summary Card */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <section className="card account-card">
+        <section className="card account-card">
             <h2>Account Summary</h2>
             <div className="stats-grid">
               <div className="stat-item">
@@ -73,10 +105,7 @@ function App() {
                 </span>
               </div>
             </div>
-          </section>
-
-          <TradePanel />
-        </div>
+        </section>
 
         {/* Active Orders Table */}
         <section className="card orders-card">
@@ -118,6 +147,16 @@ function App() {
             </div>
           )}
         </section>
+
+        <section className="portfolio-section">
+          <PortfolioTable />
+        </section>
+
+        {/* Historical Data Chart */}
+        <HistoricalChart />
+        
+        {/* Watchlist */}
+        <Watchlist />
       </main>
 
       <footer className="dashboard-footer">
