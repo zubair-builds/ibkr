@@ -111,6 +111,7 @@ const HistoricalChart = () => {
             <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 <input
                     type="text"
+                    list="ticker-options"
                     value={symbol}
                     onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                     placeholder="Symbol"
@@ -124,6 +125,18 @@ const HistoricalChart = () => {
                         width: '120px'
                     }}
                 />
+                <datalist id="ticker-options">
+                    <option value="AAPL">Apple Inc.</option>
+                    <option value="TSLA">Tesla, Inc.</option>
+                    <option value="MSFT">Microsoft Corp.</option>
+                    <option value="NVDA">NVIDIA Corp.</option>
+                    <option value="GOOGL">Alphabet Inc.</option>
+                    <option value="AMZN">Amazon.com, Inc.</option>
+                    <option value="META">Meta Platforms, Inc.</option>
+                    <option value="SPY">SPDR S&P 500 ETF</option>
+                    <option value="QQQ">Invesco QQQ Trust</option>
+                    <option value="F">Ford Motor Company</option>
+                </datalist>
 
                 {activeTab === 'historical' && (
                     <>

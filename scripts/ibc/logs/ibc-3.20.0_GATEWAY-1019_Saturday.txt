@@ -1,0 +1,62 @@
+
+================================================================================
+
+Starting IBC version 3.20.0 on 2026-08-29 at 21:54:09
+
+Operating system: Darwin Zubairs-MacBook-Pro.local 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:49 PDT 2026; root:xnu-12377.161.14~5/RELEASE_X86_64 x86_64
+
+Arguments:
+
+TWS version = 1019
+Program = Gateway
+Entry point = ibcalpha.ibc.IbcGateway
+--tws-path = /Users/zubair/Applications/IBJts
+--tws-settings-path = 
+--ibc-path = /Users/zubair/Projects/ibkr_bot/scripts/ibc
+--ibc-ini = /Users/zubair/Projects/ibkr_bot/scripts/ibc/config.ini
+--mode = paper
+--java-path = 
+--user =
+--pw =
+--fix-user =
+--fix-pw =
+
+
+=========================== An error has occurred =============================
+
+
+
+Error: Offline TWS/Gateway version 1019 is not installed: can't find jars folder
+       Make sure you install the offline version of TWS/Gateway
+       IBC does not work with the auto-updating TWS/Gateway
+
+================================================================================
+
+Starting IBC version 3.20.0 on 2026-08-29 at 21:57:20
+
+Operating system: Darwin Zubairs-MacBook-Pro.local 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:49 PDT 2026; root:xnu-12377.161.14~5/RELEASE_X86_64 x86_64
+
+Arguments:
+
+TWS version = 1019
+Program = Gateway
+Entry point = ibcalpha.ibc.IbcGateway
+--tws-path = /Users/zubair/Applications/IBJts
+--tws-settings-path = 
+--ibc-path = /Users/zubair/Projects/ibkr_bot/scripts/ibc
+--ibc-ini = /Users/zubair/Projects/ibkr_bot/scripts/ibc/config.ini
+--mode = paper
+--java-path = 
+--user =
+--pw =
+--fix-user =
+--fix-pw =
+
+
+=========================== An error has occurred =============================
+
+
+
+Error: Offline TWS/Gateway version 1019 is not installed: can't find jars folder
+       Make sure you install the offline version of TWS/Gateway
+       IBC does not work with the auto-updating TWS/Gateway

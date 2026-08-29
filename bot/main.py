@@ -48,7 +48,7 @@ async def lifespan(fastapi_app):
 
     # Build IB config from environment (and, in future, optionally from YAML).
     ib_config = IBConfig.from_env()
-    ib_service = IBService(config=ib_config)
+    ib_service = IBService(config=ib_config, app_settings=config)
     ib_service.start()
 
     # Attach service to app state for dependency injection in api.py

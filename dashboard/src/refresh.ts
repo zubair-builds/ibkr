@@ -10,10 +10,15 @@ import { createContext, useContext } from 'react';
 
 /** How often the shared tick advances. */
 export const REFRESH_INTERVAL_MS = 5000;
+export const DEFAULT_INTERVAL_MS = import.meta.env.VITE_POLL_INTERVAL_MS 
+  ? parseInt(import.meta.env.VITE_POLL_INTERVAL_MS, 10) 
+  : REFRESH_INTERVAL_MS;
 
 export interface RefreshState {
   autoTick: number;
   manualTick: number;
+  intervalMs: number | null;
+  setIntervalMs: (ms: number | null) => void;
   refreshNow: () => void;
 }
 
@@ -31,10 +36,20 @@ export const RefreshContext = createContext<RefreshState | null>(null);
  * immediately when the user clicks Refresh. Both counters only ever increase,
  * so their sum changes whenever either does.
  */
-export function useRefresh(everyNTicks = 1): { token: number; refreshNow: () => void } {
+export function useRefresh(everyNTicks = 1): { 
+  token: number; 
+  refreshNow: () => void;
+  intervalMs: number | null;
+  setIntervalMs: (ms: number | null) => void;
+} {
   const ctx = useContext(RefreshContext);
   if (!ctx) throw new Error('useRefresh must be used inside a RefreshProvider');
 
   const token = Math.floor(ctx.autoTick / Math.max(1, everyNTicks)) + ctx.manualTick;
-  return { token, refreshNow: ctx.refreshNow };
+  return { 
+    token, 
+    refreshNow: ctx.refreshNow,
+    intervalMs: ctx.intervalMs,
+    setIntervalMs: ctx.setIntervalMs
+  };
 }

@@ -78,8 +78,13 @@ export function apiGet<T>(path: string): Promise<T> {
   return request<T>(path);
 }
 
-export function apiPost<T>(path: string): Promise<T> {
-  return request<T>(path, { method: 'POST' });
+export function apiPost<T>(path: string, data?: any): Promise<T> {
+  const init: RequestInit = { method: 'POST' };
+  if (data !== undefined) {
+    init.headers = { 'Content-Type': 'application/json' };
+    init.body = JSON.stringify(data);
+  }
+  return request<T>(path, init);
 }
 
 export function apiDelete<T>(path: string): Promise<T> {

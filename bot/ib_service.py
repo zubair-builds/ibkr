@@ -8,9 +8,7 @@ import asyncio
 from pathlib import Path
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
-from ib_insync import IB, Stock
+from ib_insync import IB, Stock, MarketOrder, LimitOrder, Trade
 
 
 
@@ -96,8 +94,11 @@ class IBService:
     - Keeps reconnect signalling encapsulated behind a simple API.
     """
 
-    def __init__(self, config: Optional[IBConfig] = None) -> None:
+    def __init__(self, config: Optional[IBConfig] = None, app_settings: Optional[Dict[str, Any]] = None) -> None:
         self.config: IBConfig = config or IBConfig.from_env()
+        self.app_settings: Dict[str, Any] = app_settings or {}
+        self.max_qty = self.app_settings.get("max_qty", 1)
+        self.max_notional = self.app_settings.get("max_notional", 100)
         self._ib: IB = IB()
 
         # Thread / lifecycle
@@ -239,11 +240,13 @@ class IBService:
         while not self._stop_event.is_set():
             try:
                 if not self._ib.isConnected():
-                    print(f"Connecting to IBKR ({host}:{port}) with clientId={client_id} (Read-Only)...")
-                    # Force read-only mode to prevent any write access
-                    self._ib.connect(host, port, clientId=client_id, readonly=True)
+                    print(f"Connecting to IBKR ({host}:{port}) with clientId={client_id}...")
+                    # Allow order placement by setting readonly to False
+                    self._ib.connect(host, port, clientId=client_id, readonly=False)
+                    # Request delayed market data to avoid Error 10089 on paper accounts
+                    self._ib.reqMarketDataType(3)
                     self._set_status("connected", None)
-                    print("IB Connected!")
+                    print("IB Connected (Market data type set to Delayed)!")
 
                 # Blocks until disconnect or stop signal
                 self._ib.run()
@@ -362,6 +365,8 @@ class IBService:
                     "action": t.order.action,
                     "quantity": t.order.totalQuantity,
                     "status": t.orderStatus.status,
+                    "orderType": t.order.orderType,
+                    "lmtPrice": getattr(t.order, "lmtPrice", None),
                     "filled": t.orderStatus.filled,
                     "remaining": t.orderStatus.remaining,
                     "avgFillPrice": t.orderStatus.avgFillPrice,
@@ -369,6 +374,48 @@ class IBService:
                 }
             )
         return result
+
+    def get_executions(self) -> List[Dict[str, Any]]:
+        """
+        Request recent executions from IBKR and return them in a format 
+        compatible with the orders list for the frontend history tab.
+        """
+        if not self._ib or not self._ib.isConnected() or self._loop is None:
+            return []
+            
+        import asyncio
+        from ib_insync import ExecutionFilter
+        
+        async def _fetch():
+            # ExecutionFilter with no args fetches today's executions (and up to 7 days if configured in TWS)
+            return await self._ib.reqExecutionsAsync(ExecutionFilter())
+            
+        try:
+            future = asyncio.run_coroutine_threadsafe(_fetch(), self._loop)
+            fills = future.result(timeout=10)
+            
+            result = []
+            for f in fills:
+                # Map side BOT/SLD to BUY/SELL
+                action = "BUY" if f.execution.side == "BOT" else "SELL" if f.execution.side == "SLD" else f.execution.side
+                
+                result.append({
+                    "ticker": f.contract.symbol,
+                    "action": action,
+                    "quantity": f.execution.shares,
+                    "status": "Filled",
+                    "orderType": "MKT", # Executions don't carry original order type easily, assume MKT for display
+                    "lmtPrice": None,
+                    "filled": f.execution.shares,
+                    "remaining": 0,
+                    "avgFillPrice": f.execution.price,
+                    "lastUpdateTime": f.execution.time.strftime("%H:%M:%S") if hasattr(f.execution.time, 'strftime') else str(f.execution.time),
+                    "execId": f.execution.execId
+                })
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching executions: {e}")
+            return []
 
     def get_positions(self) -> List[Dict[str, Any]]:
         """
@@ -658,3 +705,102 @@ class IBService:
         except Exception as e:
             logger.exception("Historical data failed for %s: %s", symbol_upper, e)
             raise
+
+    def place_order(
+        self, symbol: str, action: str, quantity: float, order_type: str = "MKT", lmt_price: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Place a buy or sell order after performing risk checks.
+        """
+        symbol_upper = symbol.strip().upper() if symbol else ""
+        action_upper = action.strip().upper() if action else ""
+
+        if action_upper not in ["BUY", "SELL"]:
+            raise ValueError("Action must be 'BUY' or 'SELL'")
+            
+        if quantity <= 0:
+            raise ValueError("Quantity must be greater than zero")
+
+        if quantity > self.max_qty:
+            raise ValueError(f"Order quantity {quantity} exceeds max_qty limit of {self.max_qty}")
+
+        if not self._ib or not self._ib.isConnected():
+            raise RuntimeError("Bot not connected to IBKR")
+
+        if self._loop is None:
+            raise RuntimeError("IB event loop not available")
+
+        # Check max notional (current price * quantity)
+        # We can use the existing get_quote to find the current price
+        try:
+            quote = self.get_quote(symbol_upper)
+            # Find a valid price from the quote (last, close, bid/ask midpoint etc)
+            current_price = quote.get("last") or quote.get("close")
+            
+            if current_price is None and (quote.get("bid") is not None and quote.get("ask") is not None):
+                current_price = (quote["bid"] + quote["ask"]) / 2.0
+                
+            if current_price is None:
+                # If it's a limit order, we could theoretically use the limit price as the fallback
+                if order_type.upper() == "LMT" and lmt_price is not None:
+                    current_price = lmt_price
+                else:
+                    raise ValueError(f"Could not determine current price for {symbol_upper} to perform notional risk check")
+            
+            notional = current_price * quantity
+            if notional > self.max_notional:
+                raise ValueError(
+                    f"Order notional {notional:.2f} (qty {quantity} * price {current_price:.2f}) "
+                    f"exceeds max_notional limit of {self.max_notional}"
+                )
+        except Exception as e:
+            if isinstance(e, ValueError) and "notional" in str(e).lower():
+                raise
+            # If quote fails completely, we might want to block the order for safety
+            raise RuntimeError(f"Risk check failed: could not fetch quote for {symbol_upper}: {e}")
+
+        contract = Stock(symbol_upper, "SMART", "USD")
+        
+        if order_type.upper() == "MKT":
+            order = MarketOrder(action_upper, quantity)
+        elif order_type.upper() == "LMT":
+            if lmt_price is None:
+                raise ValueError("lmt_price is required for LMT orders")
+            order = LimitOrder(action_upper, quantity, lmt_price)
+        else:
+            raise ValueError(f"Unsupported order type: {order_type}")
+
+        import asyncio
+
+        async def _place():
+            # First qualify the contract so the order is valid
+            qualified = await self._ib.qualifyContractsAsync(contract)
+            if not qualified:
+                raise RuntimeError(f"Could not qualify contract for {symbol_upper}")
+            
+            # placeOrderAsync doesn't exist, placeOrder is synchronous but we can just call it
+            trade = self._ib.placeOrder(qualified[0], order)
+            
+            # Wait a tiny bit for the order to be submitted to the broker
+            await asyncio.sleep(0.5)
+            
+            return trade
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(_place(), self._loop)
+            trade = future.result(timeout=10)
+            
+            return {
+                "symbol": symbol_upper,
+                "action": trade.order.action,
+                "quantity": trade.order.totalQuantity,
+                "order_type": trade.order.orderType,
+                "status": trade.orderStatus.status,
+                "filled": trade.orderStatus.filled,
+                "remaining": trade.orderStatus.remaining,
+                "avg_fill_price": trade.orderStatus.avgFillPrice,
+            }
+        except Exception as e:
+            logger.exception("Order placement failed for %s: %s", symbol_upper, e)
+            raise RuntimeError(f"Failed to place order: {e}")
+

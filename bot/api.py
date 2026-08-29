@@ -1,12 +1,22 @@
 import logging
 
+from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from bot.ib_service import HistoricalDataError, IBService, PacingLimitError
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="IBKR Bot API")
+
+
+class OrderRequest(BaseModel):
+    symbol: str
+    action: str
+    quantity: float
+    order_type: str = "MKT"
+    lmt_price: Optional[float] = None
 
 
 # Enable CORS for frontend
@@ -58,6 +68,33 @@ async def get_account_summary(ib_service: IBService = Depends(get_ib_service)):
 @app.get("/orders")
 async def get_orders(ib_service: IBService = Depends(get_ib_service)):
     return ib_service.get_orders()
+
+
+@app.get("/executions")
+async def get_executions(ib_service: IBService = Depends(get_ib_service)):
+    return ib_service.get_executions()
+
+
+@app.post("/order")
+async def place_order(order_req: OrderRequest, ib_service: IBService = Depends(get_ib_service)):
+    try:
+        trade = ib_service.place_order(
+            symbol=order_req.symbol,
+            action=order_req.action,
+            quantity=order_req.quantity,
+            order_type=order_req.order_type,
+            lmt_price=order_req.lmt_price,
+        )
+        return {"status": "success", "trade": trade}
+    except ValueError as e:
+        logger.warning("POST /order validation error: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        logger.warning("POST /order runtime error: %s", e)
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.exception("POST /order internal error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/positions")

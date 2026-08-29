@@ -24,8 +24,17 @@ These instructions guide AI agents working on this repository to maintain consis
 - When verifying API changes, assume IB Gateway or TWS might not be running unless explicitly started. Handle connection timeouts gracefully and provide clear error messages to the UI.
 - Do not run automated trades in `live` mode during development. Always ensure `ENV=paper` in configuration when testing.
 
-### 4. Workflow & Task Management
-- **Task Review**: Always review the current to-do tasks (e.g., in `task.md`) before starting work.
-- **Next Steps**: When finishing a piece of work, always suggest the next possible tasks to the user.
-- **Task Updates**: After the user approves the suggested next tasks, add them to the to-do task list.
-- **Definition of Done**: Every task or feature must have a clear end goal and definition of done before execution begins.
+### 4. Workflow & Task Management (AI Project Manager Framework)
+- **Epics vs Tasks**: Work must be structured into Epics in `docs/task.md`. Focus completely on ONE Epic at a time until it is 100% complete before moving to the next.
+- **Atomic Tasks**: Break down large requests into bite-sized, atomic tasks. Do not attempt to build a massive feature in a single pass.
+- **Task Review**: Always read `docs/task.md` and `docs/architecture.md` (if relevant) before writing any code to load context.
+- **Definition of Done (DoD)**: Every task must have a clear DoD (e.g., "The button cancels the order and UI updates without refresh"). Do not mark a task done until verified locally.
+- **Implementation Plans**: For any non-trivial task, always generate an `implementation_plan.md` artifact and ask for user approval before modifying code.
+- **Completed Tasks**: When a task is fully verified, remove it from `docs/task.md` and move it to `docs/tasks_done.md` to keep the active list laser-focused.
+- **Next Steps**: When ending your turn, always explicitly suggest the very next atomic task to the user based on the active Epic.
+
+### 5. Agent Roles & Auto-Switching
+The AI agent must automatically switch its persona/role based on the user's current request to ensure a highly disciplined pipeline:
+- **The Product Manager (Ideation & Triage)**: When the user discusses a new idea, feature, or bug, default to the PM role. Do not write code. Evaluate the request, ask clarifying questions, prioritize it, and add it to the correct Epic in `docs/task.md`.
+- **The Architect (Design Phase)**: Once the PM phase is settled and a task is picked up, assume the Architect role. Research the codebase and generate an `implementation_plan.md`. Focus on system design, data flow, and avoiding tech debt. Wait for user approval.
+- **The Senior Engineer (Execution Phase)**: Only after the implementation plan is approved, switch to the Engineer role. Execute the atomic task flawlessly. Write clean, defensive code. Do not introduce bloated dependencies. Run local verification.

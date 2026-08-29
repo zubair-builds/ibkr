@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { apiGet, apiPost, errorMessage } from '../api';
 import { useRefresh } from '../refresh';
 
-interface ConnectionState {
+export interface ConnectionState {
     status: 'connected' | 'disconnected' | 'connected_no_accounts' | 'error' | 'loading';
     operational: boolean;
     connection?: {
@@ -15,17 +15,15 @@ interface ConnectionState {
     accounts?: string[];
 }
 
-const ConnectionStatus = () => {
-    const [connectionData, setConnectionData] = useState<ConnectionState>({
-        status: 'loading',
-        operational: false
-    });
+interface Props {
+    connectionData: ConnectionState;
+}
+
+const ConnectionStatus = ({ connectionData }: Props) => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [actionMessage, setActionMessage] = useState('');
 
-    const { token, refreshNow } = useRefresh();
-
-    const reqId = useRef(0);
+    const { refreshNow } = useRefresh();
 
     const reconnect = async () => {
         setIsRefreshing(true);
@@ -39,27 +37,6 @@ const ConnectionStatus = () => {
             refreshNow();
         }
     };
-
-    useEffect(() => {
-        const id = ++reqId.current;
-        setIsRefreshing(true);
-        void (async () => {
-            try {
-                const data = await apiGet<ConnectionState>('/health');
-                if (id !== reqId.current) return;
-                setConnectionData(data);
-            } catch (e) {
-                if (id !== reqId.current) return;
-                setConnectionData({
-                    status: 'error',
-                    operational: false,
-                    connection: { error: errorMessage(e) }
-                });
-            } finally {
-                if (id === reqId.current) setIsRefreshing(false);
-            }
-        })();
-    }, [token]);
 
     const getStatusText = () => {
         if (connectionData.status === 'loading') return 'Checking...';

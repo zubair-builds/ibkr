@@ -345,3 +345,195 @@ body {
   color: var(--accent-red);
   font-size: 0.9rem;
 }
+
+/* =========================================
+   Trade Center Styling
+   ========================================= */
+
+.trade-center-card {
+  margin-top: 1rem;
+  background: rgba(30, 30, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.trade-center-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+
+.trade-center-header h2 {
+  margin: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tab-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.tab-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.tab-badge {
+  background: var(--accent-blue);
+  color: white;
+  border-radius: 12px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.new-trade-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 150px;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.modern-input, .modern-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.75rem;
+  color: white;
+  font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.modern-input:focus, .modern-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.toggle-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.toggle-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn.active.buy {
+  background: var(--accent-green);
+  color: #000;
+}
+
+.toggle-btn.active.sell {
+  background: var(--accent-red);
+  color: white;
+}
+
+.submit-order-btn {
+  padding: 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+  width: 100%;
+}
+
+.submit-order-btn:active {
+  transform: scale(0.98);
+}
+
+.submit-order-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submit-order-btn.buy {
+  background: var(--accent-green);
+  color: #000;
+}
+
+.submit-order-btn.sell {
+  background: var(--accent-red);
+  color: white;
+}
+
+.trade-message {
+  padding: 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.trade-message.success {
+  background: rgba(74, 222, 128, 0.1);
+  color: var(--accent-green);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.trade-message.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.time-col {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+}

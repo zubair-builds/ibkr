@@ -12,19 +12,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { RefreshContext, REFRESH_INTERVAL_MS } from './refresh';
+import { RefreshContext, DEFAULT_INTERVAL_MS } from './refresh';
 
 export function RefreshProvider({
   children,
-  intervalMs = REFRESH_INTERVAL_MS,
+  defaultIntervalMs = DEFAULT_INTERVAL_MS,
 }: {
   children: ReactNode;
-  intervalMs?: number;
+  defaultIntervalMs?: number;
 }) {
   const [autoTick, setAutoTick] = useState(0);
   const [manualTick, setManualTick] = useState(0);
+  const [intervalMs, setIntervalMs] = useState<number | null>(defaultIntervalMs);
 
   useEffect(() => {
+    if (intervalMs === null) return;
     const id = setInterval(() => setAutoTick((t) => t + 1), intervalMs);
     return () => clearInterval(id);
   }, [intervalMs]);
@@ -32,8 +34,8 @@ export function RefreshProvider({
   const refreshNow = useCallback(() => setManualTick((t) => t + 1), []);
 
   const value = useMemo(
-    () => ({ autoTick, manualTick, refreshNow }),
-    [autoTick, manualTick, refreshNow],
+    () => ({ autoTick, manualTick, intervalMs, setIntervalMs, refreshNow }),
+    [autoTick, manualTick, intervalMs, setIntervalMs, refreshNow],
   );
 
   return <RefreshContext.Provider value={value}>{children}</RefreshContext.Provider>;

@@ -19,6 +19,8 @@ interface Order {
 type AccountSummary = Record<string, string>;
 
 import ConnectionStatus from './components/ConnectionStatus';
+import type { ConnectionState } from './components/ConnectionStatus';
+import TradeCenter from './components/TradeCenter';
 import HistoricalChart from './components/HistoricalChart';
 import PortfolioTable from './components/PortfolioTable';
 import Watchlist from './components/Watchlist';
@@ -28,8 +30,12 @@ function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [error, setError] = useState('');
+  const [connectionData, setConnectionData] = useState<ConnectionState>({
+    status: 'loading',
+    operational: false
+  });
 
-  const { token, refreshNow } = useRefresh();
+  const { token, refreshNow, intervalMs, setIntervalMs } = useRefresh();
 
   // Requests can outlive the tick that started them (/account and /orders are
   // serial, and a slow bot can push a response past the next 5s tick), so stamp
@@ -40,23 +46,47 @@ function App() {
     const id = ++reqId.current;
     void (async () => {
       try {
-        const status = await apiGet<{ operational: boolean }>('/health');
+        const status = await apiGet<ConnectionState>('/health');
         if (id !== reqId.current) return;
+        
+        setConnectionData(status);
 
         if (status.operational) {
-          const [nextAccount, nextOrders] = [
-            await apiGet<AccountSummary>('/account'),
-            await apiGet<Order[]>('/orders'),
-          ];
+          const [nextAccount, nextOrders, nextExecutions] = await Promise.all([
+            apiGet<AccountSummary>('/account'),
+            apiGet<Order[]>('/orders'),
+            apiGet<Order[]>('/executions').catch(() => [] as Order[])
+          ]);
           if (id !== reqId.current) return;
+          
           setAccount(nextAccount);
-          setOrders(nextOrders);
+          
+          // Merge orders and executions. Deduplicate rudimentary by ticker+action+qty
+          const allOrders = [...nextOrders];
+          const orderKeys = new Set(nextOrders.filter(o => o.status === 'Filled').map(o => `${o.ticker}-${o.action}-${o.quantity}`));
+          
+          for (const exec of nextExecutions) {
+             const key = `${exec.ticker}-${exec.action}-${exec.quantity}`;
+             if (!orderKeys.has(key)) {
+                 allOrders.push(exec);
+             }
+          }
+          
+          // Sort by time
+          allOrders.sort((a, b) => a.lastUpdateTime.localeCompare(b.lastUpdateTime));
+          
+          setOrders(allOrders);
         }
         setError('');
         setLastUpdated(new Date());
       } catch (e) {
         if (id !== reqId.current) return;
         setError(errorMessage(e));
+        setConnectionData({
+            status: 'error',
+            operational: false,
+            connection: { error: errorMessage(e) }
+        });
       }
     })();
   }, [token]);
@@ -66,10 +96,34 @@ function App() {
       <header className="dashboard-header">
         <h1>IBKR Bot Dashboard</h1>
         <div className="header-actions">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>Auto-Refresh:</label>
+            <select 
+              value={intervalMs === null ? 'off' : intervalMs.toString()}
+              onChange={(e) => setIntervalMs(e.target.value === 'off' ? null : parseInt(e.target.value, 10))}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '4px',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: 'white',
+                fontSize: '0.85rem',
+                marginRight: '8px'
+              }}
+            >
+              <option value="off">Off</option>
+              <option value="1000">1s</option>
+              <option value="2000">2s</option>
+              <option value="5000">5s</option>
+              <option value="10000">10s</option>
+              <option value="30000">30s</option>
+              <option value="60000">1m</option>
+            </select>
+          </div>
           <button className="btn-refresh" onClick={refreshNow} title="Refresh account and orders">
             Refresh
           </button>
-          <ConnectionStatus />
+          <ConnectionStatus connectionData={connectionData} />
         </div>
       </header>
 
@@ -107,46 +161,8 @@ function App() {
             </div>
         </section>
 
-        {/* Active Orders Table */}
-        <section className="card orders-card">
-          <h2>Active Orders & Trades</h2>
-          {orders.length === 0 ? (
-            <div className="empty-state">No active orders</div>
-          ) : (
-            <div className="table-responsive">
-              <table className="orders-table">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Ticker</th>
-                    <th>Action</th>
-                    <th>Qty</th>
-                    <th>Status</th>
-                    <th>Filled</th>
-                    <th>Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...orders].reverse().map((order, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontSize: '0.85rem', color: '#888' }}>{order.lastUpdateTime}</td>
-                      <td>{order.ticker}</td>
-                      <td>
-                        <span className={`badge ${order.action.toLowerCase()}`}>{order.action}</span>
-                      </td>
-                      <td>{order.quantity}</td>
-                      <td>
-                        <span className={`status-pill ${order.status.toLowerCase()}`}>{order.status}</span>
-                      </td>
-                      <td>{order.filled}/{order.quantity}</td>
-                      <td>{order.avgFillPrice ? `$${order.avgFillPrice}` : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        {/* Trade Center: New Trade, Pending Orders, Order History */}
+        <TradeCenter orders={orders} />
 
         <section className="portfolio-section">
           <PortfolioTable />
