@@ -5,7 +5,7 @@
  * so the base URL exists once and errors surface the same way everywhere.
  */
 
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
+const BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.PROD ? '' : 'http://localhost:8000');
 
 export { BASE as API_BASE };
 
