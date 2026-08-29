@@ -1,31 +1,27 @@
 version: '3.8'
 
 services:
-  ib-gateway:
-    image: ghcr.io/gnzsnz/ib-gateway:stable
+  trading-bot:
+    build: .
     environment:
+      # TWS config for the bundled gateway
       - TWS_USERID=${TWS_USERID}
       - TWS_PASSWORD=${TWS_PASSWORD}
       - TRADING_MODE=${TRADING_MODE:-paper}
       - VNC_PASSWORD=${VNC_PASSWORD:-password}
       - ALLOW_BLIND_TRADING=yes
-      - AUTO_RESTART_TIME=03:00 # Restart at 3am
-      - RELOGIN_AFTER_TWOFA_TIMEOUT=no # Stop retrying if 2FA times out
-    ports:
-      - "4001:4003" # 4001 for live trading (using ssl port inside)
-      - "4002:4004" # 4002 for paper trading (using ssl port inside)
-      - "5900:5900" # VNC port
-    restart: on-failure
-
-  trading-bot:
-    build: .
-    depends_on:
-      - ib-gateway
-    environment:
-      - TWS_HOST=ib-gateway
-      - TWS_PORT=4004 # Connect to SSL port for paper, or 4003 for live
+      - AUTO_RESTART_TIME=03:00
+      - RELOGIN_AFTER_TWOFA_TIMEOUT=no
+      
+      # Bot configuration
       - CLIENT_ID=1
       - ENV=paper
+    ports:
+      - "4001:4003" # API for live trading
+      - "4002:4004" # API for paper trading
+      - "5900:5900" # VNC port (for debugging the gateway visually)
+      - "8000:8000" # FastAPI backend
     volumes:
       - ./logs:/app/logs
       - ./config:/app/config
+    restart: on-failure

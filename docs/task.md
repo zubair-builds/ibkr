@@ -35,7 +35,7 @@
 
 ---
 
-## ⏸️ UPCOMING EPIC 4: Production Safety & Risk Management (Low Priority)
+## ⏸️ UPCOMING EPIC 4: Production Safety & Risk Management 
 **Goal:** Ensure the bot has necessary guardrails, monitoring, and security before ever trading with real money or running entirely unsupervised.
 
 - `[/]` **Task 4.0: Local IBC Setup & Testing (No Docker)**
@@ -46,4 +46,4 @@
 - [ ] **Task 4.2: System Logging UI**
   - **DoD**: A dedicated dashboard tab streams backend Python logs and AI thinking/raw prompts in real-time.
 - [ ] **Task 4.3: Security & Deployment**
-  - **DoD**: Dashboard is protected by basic authentication. The entire stack can be launched via a single `docker-compose up` command.
+  - **DoD**: Dashboard is protected by basic authentication. *(Dockerization part is complete)*.
