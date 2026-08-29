@@ -69,7 +69,8 @@ app.router.lifespan_context = lifespan
 def main():
     print(f"Loaded Config: {config}")
     # Run the API server
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":

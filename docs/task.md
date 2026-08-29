@@ -51,5 +51,6 @@
     - [x] Dockerization & Local E2E Verification complete
     - [x] Prepare for and deploy to Render (render.yaml created)
     - [x] Implement Basic Authentication
+    - [x] Fix Render deployment issues (TRADING_MODE and dynamic PORT binding)
 - [ ] **Task 4.4: System Health & Connection Indicator**
   - **DoD**: A persistent global UI element (e.g., in the navbar) that displays the live connection status (Connected/Disconnected) of the Python backend to the IB Gateway, including error states, so the user has immediate feedback when running headlessly.
