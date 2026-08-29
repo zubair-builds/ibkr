@@ -45,5 +45,11 @@
   - **DoD**: A global UI button that instantly disconnects the broker and cancels pending orders. Hardcoded limits (Max daily loss, Max orders/min) exist in the backend.
 - [ ] **Task 4.2: System Logging UI**
   - **DoD**: A dedicated dashboard tab streams backend Python logs and AI thinking/raw prompts in real-time.
-- [ ] **Task 4.3: Security & Deployment**
-  - **DoD**: Dashboard is protected by basic authentication. *(Dockerization part is complete)*.
+- `[/]` **Task 4.3: Security & Deployment**
+  - **DoD**: Deploy the "All-in-One" Docker container to Render and verify end-to-end functionality. Dashboard is protected by basic authentication.
+  - **Status**: 
+    - [x] Dockerization & Local E2E Verification complete
+    - [x] Prepare for and deploy to Render (render.yaml created)
+    - [x] Implement Basic Authentication
+- [ ] **Task 4.4: System Health & Connection Indicator**
+  - **DoD**: A persistent global UI element (e.g., in the navbar) that displays the live connection status (Connected/Disconnected) of the Python backend to the IB Gateway, including error states, so the user has immediate feedback when running headlessly.

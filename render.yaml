@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ibkr-bot
+    env: docker
+    region: oregon
+    envVars:
+      - key: TRADING_MODE
+        value: paper
+      - key: TWS_USERID
+        sync: false
+      - key: TWS_PASSWORD
+        sync: false
+      - key: DASHBOARD_USER
+        sync: false
+      - key: DASHBOARD_PASS
+        sync: false

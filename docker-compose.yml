@@ -16,6 +16,8 @@ services:
       # Bot configuration
       - CLIENT_ID=1
       - ENV=paper
+      - DASHBOARD_USER=${DASHBOARD_USER:-admin}
+      - DASHBOARD_PASS=${DASHBOARD_PASS:-admin}
     ports:
       - "4001:4003" # API for live trading
       - "4002:4004" # API for paper trading

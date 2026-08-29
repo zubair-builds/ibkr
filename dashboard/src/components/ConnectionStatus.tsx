@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { apiGet, apiPost, errorMessage } from '../api';
+import { useState } from 'react';
+import { apiPost, errorMessage } from '../api';
 import { useRefresh } from '../refresh';
 
 export interface ConnectionState {

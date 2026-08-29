@@ -3,12 +3,31 @@ import logging
 from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import os
+import secrets
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from bot.ib_service import HistoricalDataError, IBService, PacingLimitError
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="IBKR Bot API")
+
+security = HTTPBasic()
+
+def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_username = secrets.compare_digest(credentials.username, os.getenv("DASHBOARD_USER", "admin"))
+    correct_password = secrets.compare_digest(credentials.password, os.getenv("DASHBOARD_PASS", "admin"))
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+app = FastAPI(title="IBKR Bot API", dependencies=[Depends(verify_credentials)])
 
 
 class OrderRequest(BaseModel):
@@ -213,3 +232,15 @@ def add_to_watchlist(symbol: str, ib_service: IBService = Depends(get_ib_service
 @app.delete("/watchlist/{symbol}")
 def remove_from_watchlist(symbol: str, ib_service: IBService = Depends(get_ib_service)):
     return ib_service.remove_from_watchlist(symbol)
+
+
+# Mount static assets directory
+app.mount("/assets", StaticFiles(directory="dashboard/dist/assets"), name="assets")
+
+# Catch-all route to serve the React SPA
+@app.get("/{catchall:path}")
+def serve_spa(catchall: str):
+    file_path = os.path.join("dashboard/dist", catchall)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    return FileResponse("dashboard/dist/index.html")

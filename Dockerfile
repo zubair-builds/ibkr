@@ -1,3 +1,12 @@
+# Stage 1: Build the React Dashboard
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/dashboard
+COPY dashboard/package.json dashboard/yarn.lock ./
+RUN yarn install --frozen-lockfile
+COPY dashboard/ ./
+RUN yarn build
+
+# Stage 2: Final Image (IB Gateway + Python API)
 FROM ghcr.io/gnzsnz/ib-gateway:stable
 
 # Switch to root to install system dependencies
@@ -21,6 +30,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
+
+# Copy compiled frontend from Stage 1
+COPY --from=frontend-builder /app/dashboard/dist /app/dashboard/dist
 
 # Copy and configure our custom startup script
 COPY start_all.sh /app/start_all.sh

@@ -1,99 +1,56 @@
-# IBKR Trading Bot
+# IBKR Trading Bot & Dashboard
 
-A Python-based trading bot for Interactive Brokers using `ib-insync`.
+An "All-in-One" Python-based algorithmic trading bot and React dashboard for Interactive Brokers, powered by `ib-insync` and `FastAPI`.
 
-## Setup
+## 🏗️ Architecture
 
-1.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+This project is built around a **Single-Container Docker Setup** to make deployment to the cloud (like Render) effortless. 
+- **IB Gateway (Headless)**: Runs securely inside the container.
+- **Python Backend**: FastAPI server communicating locally with the Gateway.
+- **React Dashboard**: Bundled securely inside the Python API and served as static files to eliminate CORS issues and the need for dual-hosting.
 
-2.  **Configuration:**
-    - Edit `config/settings.yaml` to change environment (`paper` or `live`) and trading limits.
-    - Edit `.env` to set your TWS/Gateway host and port.
+## 🚀 Local Development & Setup
 
-## connecting to IBKR (Crucial Step)
+To run the entire stack (Gateway, Backend API, and Frontend Dashboard), you only need Docker.
 
-To allow the bot to connect, you must configure Trader Workstation (TWS) or IB Gateway:
+### 1. Configuration
+Create or edit the `.env` file in the root of the project with your Interactive Brokers credentials and desired dashboard login:
 
-1.  Open **TWS**.
-2.  Go to **File** -> **Global Configuration** (or **Edit** -> **Global Configuration**).
-3.  Navigate to **API** -> **Settings**.
-4.  **Enable** "Enable ActiveX and Socket Clients".
-5.  **Disable** "Read-Only API" (if you want the bot to place orders).
-6.  **Socket Port**: Ensure this matches your `.env` file (`7496` for TWS Live, `7497` for TWS Paper, `4001` for Gateway Live, `4002` for Gateway Paper).
-7.  **Trusted IPs**: If running on a different machine, add your IP to "Trusted IPs" (not needed for localhost `127.0.0.1`).
-8.  Click **Apply/OK**.
+```env
+TWS_USERID=your_ibkr_username
+TWS_PASSWORD=your_ibkr_password
+TRADING_MODE=paper
 
-## Running the Bot
+DASHBOARD_USER=admin
+DASHBOARD_PASS=admin
+```
 
-### Backend API (with TWS)
-1. Start TWS on your machine.
-2. Run the bot:
-   ```bash
-   python3 bot/main.py
-   ```
+### 2. Start the Container
+```bash
+docker-compose up -d
+```
+*(If you make changes to the code, use `docker-compose up --build -d` to rebuild).*
 
-Once the bot is running, it exposes a REST API on `http://localhost:8000`. You can test these endpoints directly in your browser or view the interactive Swagger docs at `http://localhost:8000/docs`.
+### 3. Access the Dashboard
+Once started, the backend and frontend are hosted at:
+- **Dashboard**: [http://localhost:8000](http://localhost:8000)
+- **API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### Frontend Dashboard
-The project includes a React dashboard built with Vite to visualize live broker state.
+*Note: You will be prompted for the Basic Auth credentials you set in your `.env` file!*
 
-1. Navigate to the `dashboard` directory:
-   ```bash
-   cd dashboard
-   ```
-2. Install dependencies:
-   ```bash
-   yarn install
-   ```
-3. Run the development server:
-   ```bash
-   yarn dev
-   ```
-The dashboard will be available at `http://localhost:5173`. By default, it connects to the local backend API at `http://localhost:8000`. You can override this by copying `dashboard/.env.example` to `dashboard/.env.local` and changing the `VITE_API_BASE` variable.
+## ☁️ Deployment (Render)
 
-### Available API Endpoints
+This project includes a `render.yaml` configuration file for 1-click deployments to Render.com as a Web Service.
 
-- **`GET /account`**: View account balance and buying power
-- **`GET /positions`**: List open positions
-- **`GET /orders`**: List active orders
-- **`GET /quote?symbol=AAPL`**: Get the latest market data snapshot for a symbol
-- **`GET /historical?symbol=AAPL`**: Fetch historical market data
-- **`GET /watchlist`**: View the current watchlist
+1. Push your repository to GitHub.
+2. Connect your repository to Render via the "Blueprints" tab to apply the `render.yaml` file.
+3. In the Render Dashboard, securely fill in the missing environment variables (`TWS_USERID`, `TWS_PASSWORD`, `DASHBOARD_USER`, `DASHBOARD_PASS`).
 
-### Server Deployment (Docker)
-This setup runs a headless IB Gateway alongside the bot.
+Render will automatically pull the container, build it, and host your private IBKR dashboard on the web securely behind Basic Authentication!
 
-1.  **Configure `.env`**:
-    Add your IBKR credentials (required for the Gateway container):
-    ```bash
-    TWS_USERID=your_username
-    TWS_PASSWORD=your_password
-    VNC_PASSWORD=securepassword
-    TRADING_MODE=paper
-    ```
-
-2.  **Start Services**:
-    ```bash
-    docker-compose up -d
-    ```
-
-3.  **Authenticate (First Time Only)**:
-    - Connect to the server via VNC (port 5900).
-    - Use the `VNC_PASSWORD` you set.
-    - Complete the 2FA login process in the IB Gateway window.
-    - Once logged in, the gateway will remain running.
-
-4.  **View Logs**:
-    ```bash
-    docker-compose logs -f trading-bot
-    ```
-
-## Structure
-- `bot/`: Backend Python source code.
-- `dashboard/`: Vite + React frontend dashboard.
-- `config/`: Configuration files.
-- `logs/`: Application logs.
-- `data/`: Local storage (e.g., Parquet files).
+## 📂 Project Structure
+- `bot/`: Python backend and FastAPI endpoints.
+- `dashboard/`: Vite + React + TypeScript frontend.
+- `config/`: Trading configurations and settings (`settings.yaml`).
+- `scripts/`: Custom initialization scripts for the Docker entrypoint.
+- `render.yaml`: Infrastructure as Code for Render deployment.
