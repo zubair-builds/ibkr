@@ -45,6 +45,9 @@ async def lifespan(fastapi_app):
     global ib_service
 
     print("Starting IBKR Bot API...")
+    
+    from bot.db import init_db
+    init_db()
 
     # Build IB config from environment (and, in future, optionally from YAML).
     ib_config = IBConfig.from_env()

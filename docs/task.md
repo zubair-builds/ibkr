@@ -7,8 +7,7 @@
   - **DoD**: UI buttons exist to cancel pending orders or modify their limit prices. A canceled order immediately reflects in the History tab without page refresh.
 - [ ] **Task 1.2: Real-time Price Streaming (WebSockets)**
   - **DoD**: Replace HTTP polling with WebSockets for live/delayed market data. The dashboard updates prices instantly without constant HTTP requests.
-- [ ] **Task 1.3: Trade Execution History Database (SQLite)**
-  - **DoD**: The backend saves all fills to a local `trades.db`. The dashboard's History tab fetches from this DB to show lifetime trades, surviving restarts.
+
 
 ---
 
@@ -45,12 +44,10 @@
   - **DoD**: A global UI button that instantly disconnects the broker and cancels pending orders. Hardcoded limits (Max daily loss, Max orders/min) exist in the backend.
 - [ ] **Task 4.2: System Logging UI**
   - **DoD**: A dedicated dashboard tab streams backend Python logs and AI thinking/raw prompts in real-time.
-- `[/]` **Task 4.3: Security & Deployment**
-  - **DoD**: Deploy the "All-in-One" Docker container to Render and verify end-to-end functionality. Dashboard is protected by basic authentication.
-  - **Status**: 
-    - [x] Dockerization & Local E2E Verification complete
-    - [x] Prepare for and deploy to Render (render.yaml created)
-    - [x] Implement Basic Authentication
-    - [x] Fix Render deployment issues (TRADING_MODE and dynamic PORT binding)
 - [ ] **Task 4.4: System Health & Connection Indicator**
   - **DoD**: A persistent global UI element (e.g., in the navbar) that displays the live connection status (Connected/Disconnected) of the Python backend to the IB Gateway, including error states, so the user has immediate feedback when running headlessly.
+
+---
+
+## ⏸️ UPCOMING EPIC 5: UI & Aesthetics
+**Goal:** Polish the frontend to have a more professional and customized appearance.

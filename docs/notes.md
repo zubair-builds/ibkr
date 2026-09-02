@@ -1,6 +1,8 @@
 # IBKR Bot Notes & Reference
 
 ## 🚀 Docker & Local Development
+verify docker app running
+docker-compose up -d --build
 - **Start Container:** `docker-compose up -d`
 - **Stop Container:** `docker-compose down`
 - **Force Rebuild (Ignore Cache):** `docker-compose build --no-cache && docker-compose up -d`

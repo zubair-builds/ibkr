@@ -126,6 +126,29 @@ class IBService:
         self._watchlist_file = str(Path(__file__).resolve().parent.parent / "watchlist.json")
         self._watchlist: List[str] = self._load_watchlist()
 
+        # Hook up execution event listener
+        self._ib.execDetailsEvent += self._on_exec_details
+
+    def _on_exec_details(self, trade, fill):
+        try:
+            from bot.db import insert_trade
+            action = "BUY" if fill.execution.side == "BOT" else "SELL" if fill.execution.side == "SLD" else fill.execution.side
+            
+            # fill.time is sometimes datetime.datetime, sometimes string
+            time_str = fill.execution.time.isoformat() if hasattr(fill.execution.time, 'isoformat') else str(fill.execution.time)
+            
+            insert_trade(
+                execId=fill.execution.execId,
+                time=time_str,
+                symbol=fill.contract.symbol,
+                action=action,
+                quantity=fill.execution.shares,
+                price=fill.execution.price,
+                orderType="MKT" # We don't always know it from execution, assuming MKT
+            )
+        except Exception as e:
+            logger.error(f"Error handling exec details: {e}")
+
     def _load_watchlist(self) -> List[str]:
         import json
         if os.path.exists(self._watchlist_file):
@@ -247,6 +270,11 @@ class IBService:
                     self._ib.reqMarketDataType(3)
                     self._set_status("connected", None)
                     print("IB Connected (Market data type set to Delayed)!")
+                    # Request executions to backfill local DB for the day
+                    try:
+                        self._ib.reqExecutions()
+                    except Exception as e:
+                        print(f"Failed to request executions on startup: {e}")
 
                 # Blocks until disconnect or stop signal
                 self._ib.run()
@@ -377,44 +405,13 @@ class IBService:
 
     def get_executions(self) -> List[Dict[str, Any]]:
         """
-        Request recent executions from IBKR and return them in a format 
-        compatible with the orders list for the frontend history tab.
+        Return lifetime executions from the local SQLite database.
         """
-        if not self._ib or not self._ib.isConnected() or self._loop is None:
-            return []
-            
-        import asyncio
-        from ib_insync import ExecutionFilter
-        
-        async def _fetch():
-            # ExecutionFilter with no args fetches today's executions (and up to 7 days if configured in TWS)
-            return await self._ib.reqExecutionsAsync(ExecutionFilter())
-            
         try:
-            future = asyncio.run_coroutine_threadsafe(_fetch(), self._loop)
-            fills = future.result(timeout=10)
-            
-            result = []
-            for f in fills:
-                # Map side BOT/SLD to BUY/SELL
-                action = "BUY" if f.execution.side == "BOT" else "SELL" if f.execution.side == "SLD" else f.execution.side
-                
-                result.append({
-                    "ticker": f.contract.symbol,
-                    "action": action,
-                    "quantity": f.execution.shares,
-                    "status": "Filled",
-                    "orderType": "MKT", # Executions don't carry original order type easily, assume MKT for display
-                    "lmtPrice": None,
-                    "filled": f.execution.shares,
-                    "remaining": 0,
-                    "avgFillPrice": f.execution.price,
-                    "lastUpdateTime": f.execution.time.strftime("%H:%M:%S") if hasattr(f.execution.time, 'strftime') else str(f.execution.time),
-                    "execId": f.execution.execId
-                })
-            return result
+            from bot.db import get_all_trades
+            return get_all_trades()
         except Exception as e:
-            logger.error(f"Error fetching executions: {e}")
+            logger.error(f"Error fetching executions from DB: {e}")
             return []
 
     def get_positions(self) -> List[Dict[str, Any]]:

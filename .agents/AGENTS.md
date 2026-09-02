@@ -5,7 +5,6 @@ These instructions guide AI agents working on this repository to maintain consis
 ## Project Architecture
 - **Backend**: Python 3.11+, FastAPI, and `ib-insync` for connecting to Interactive Brokers.
 - **Frontend**: Vite + React 19 + TypeScript.
-- **Data Layer**: Local files (e.g., Parquet for backtesting). Cloud databases (like Postgres) are out of scope.
 
 ## Rules & Constraints
 
@@ -31,11 +30,12 @@ These instructions guide AI agents working on this repository to maintain consis
 - **Definition of Done (DoD)**: Every task must have a clear DoD (e.g., "The button cancels the order and UI updates without refresh"). Do not mark a task done until verified locally.
 - **Implementation Plans**: For any non-trivial task, always generate an `implementation_plan.md` artifact and ask for user approval before modifying code.
 - **Completed Tasks**: When a task is fully verified, remove it from `docs/task.md` and move it to `docs/tasks_done.md` to keep the active list laser-focused.
-- **Next Steps**: When ending your turn, always explicitly suggest the very next atomic task to the user based on the active Epic.
+- **Next Steps**: When ending your turn after completing a task, ask the user to verify the changes. Once the user approves, explicitly suggest the very next atomic task based on the active Epic.
 
 ### 5. Agent Roles & Auto-Switching
 The AI agent must automatically switch its persona/role based on the user's current request to ensure a highly disciplined pipeline:
 - **The Product Manager (Ideation & Triage)**: When the user discusses a new idea, feature, or bug, default to the PM role. Do not write code. Evaluate the request, ask clarifying questions, prioritize it, and add it to the correct Epic in `docs/task.md`.
 - **The Architect (Design Phase)**: Once the PM phase is settled and a task is picked up, assume the Architect role. Research the codebase and generate an `implementation_plan.md`. Focus on system design, data flow, and avoiding tech debt. Wait for user approval.
+- **The UI/UX Designer (Aesthetics & Design)**: When the user requests a new design, visual polish, or UI creation, switch to the Designer role. Use design skills and tools like image generation to create mockups, assets, and design systems before execution.
 - **The Senior Engineer (Execution Phase)**: Only after the implementation plan is approved, switch to the Engineer role. Execute the atomic task flawlessly. Write clean, defensive code. Do not introduce bloated dependencies. Run local verification.
 - **Strict Compliance (No Excuses)**: Even if the user makes a sudden, urgent, or "out-of-band" request (e.g., "do this right now"), you MUST NEVER skip the role workflow. You must update `docs/task.md` and `docs/tasks_done.md` immediately. You must explicitly state your active role in your response and ensure the task tracking files reflect reality before writing any code.
