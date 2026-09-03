@@ -8,7 +8,7 @@ import asyncio
 from pathlib import Path
 from collections import deque
 from dataclasses import dataclass
-from ib_insync import IB, Stock, MarketOrder, LimitOrder, Trade
+from ib_insync import IB, Stock, MarketOrder, LimitOrder, StopOrder, Trade
 
 
 
@@ -128,6 +128,11 @@ class IBService:
 
         # Hook up execution event listener
         self._ib.execDetailsEvent += self._on_exec_details
+
+        # Real-time ticker streaming
+        self._ticker_callbacks: Dict[str, List[Any]] = {}
+        self._active_tickers: Dict[str, Any] = {}
+        self._ib.pendingTickersEvent += self._on_pending_tickers
 
     def _on_exec_details(self, trade, fill):
         try:
@@ -389,6 +394,7 @@ class IBService:
         for t in trades:
             result.append(
                 {
+                    "orderId": t.order.orderId,
                     "ticker": t.contract.symbol,
                     "action": t.order.action,
                     "quantity": t.order.totalQuantity,
@@ -402,6 +408,34 @@ class IBService:
                 }
             )
         return result
+
+    def cancel_order(self, order_id: int) -> Dict[str, Any]:
+        """Cancel an open order by its orderId."""
+        if not self._ib:
+            raise RuntimeError("IB service not connected")
+        
+        trade = next((t for t in self._ib.trades() if getattr(t.order, "orderId", None) == order_id), None)
+        if not trade:
+            raise ValueError(f"Order with ID {order_id} not found or is no longer active.")
+            
+        self._ib.cancelOrder(trade.order)
+        return {"status": "success", "message": f"Cancel request sent for order {order_id}"}
+
+    def modify_order(self, order_id: int, quantity: float, lmt_price: Optional[float] = None) -> Dict[str, Any]:
+        """Modify an open order's quantity and limit price."""
+        if not self._ib:
+            raise RuntimeError("IB service not connected")
+            
+        trade = next((t for t in self._ib.trades() if getattr(t.order, "orderId", None) == order_id), None)
+        if not trade:
+            raise ValueError(f"Order with ID {order_id} not found or is no longer active.")
+            
+        trade.order.totalQuantity = quantity
+        if trade.order.orderType == "LMT" and lmt_price is not None:
+            trade.order.lmtPrice = lmt_price
+            
+        self._ib.placeOrder(trade.contract, trade.order)
+        return {"status": "success", "message": f"Modify request sent for order {order_id}"}
 
     def get_executions(self) -> List[Dict[str, Any]]:
         """
@@ -498,12 +532,15 @@ class IBService:
                 }
                 try:
                     self._ib.cancelMktData(contract)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Error cancelling mkt data: %s", e)
                 return quote_dict
 
+            if not self._loop.is_running():
+                raise RuntimeError("IB event loop is not running")
+
             future = asyncio.run_coroutine_threadsafe(_fetch_quote(), self._loop)
-            quote = future.result(timeout=10)
+            quote = future.result(timeout=10.0)
 
             # If no market data received, try to get price from portfolio positions as fallback
             if all(value is None for key, value in quote.items() if key not in {"symbol"}):
@@ -527,6 +564,100 @@ class IBService:
         except Exception as e:
             logger.exception("Quote failed for %s: %s", symbol_upper, e)
             raise
+
+    def _format_quote(self, ticker) -> Dict[str, Any]:
+        quote_dict = {
+            "symbol": ticker.contract.symbol,
+            "last": self._sanitize_float(ticker.last),
+            "bid": self._sanitize_float(ticker.bid),
+            "ask": self._sanitize_float(ticker.ask),
+            "close": self._sanitize_float(ticker.close),
+            "high": self._sanitize_float(ticker.high),
+            "low": self._sanitize_float(ticker.low),
+            "volume": self._sanitize_float(ticker.volume),
+            "time": getattr(ticker.time, "isoformat", lambda: None)() if getattr(ticker, "time", None) else None,
+        }
+        if all(value is None for key, value in quote_dict.items() if key not in {"symbol", "time"}):
+            portfolio_items = self._ib.portfolio()
+            for item in portfolio_items:
+                if item.contract.symbol == ticker.contract.symbol:
+                    quote_dict["last"] = self._sanitize_float(item.marketPrice)
+                    quote_dict["close"] = self._sanitize_float(item.marketPrice)
+                    break
+        return quote_dict
+
+    def subscribe_ticker_updates(self, symbol: str, callback: Any) -> None:
+        """
+        Subscribe to live tick updates for a given symbol.
+        The callback will be invoked with a quote dictionary whenever the ticker updates.
+        """
+        symbol_upper = symbol.strip().upper()
+        if symbol_upper not in self._ticker_callbacks:
+            self._ticker_callbacks[symbol_upper] = []
+        self._ticker_callbacks[symbol_upper].append(callback)
+
+        if symbol_upper not in self._active_tickers:
+            import asyncio
+            async def _sub():
+                contract = Stock(symbol_upper, "SMART", "USD")
+                ticker = self._ib.reqMktData(contract, "", snapshot=False, regulatorySnapshot=False)
+                self._active_tickers[symbol_upper] = (contract, ticker)
+                
+                # Wait briefly for initial data, then push immediately so UI doesn't hang
+                await asyncio.sleep(1)
+                if symbol_upper in self._active_tickers:
+                    quote_dict = self._format_quote(ticker)
+                    for cb in self._ticker_callbacks.get(symbol_upper, []):
+                        try:
+                            cb(quote_dict)
+                        except Exception:
+                            pass
+            
+            if self._loop and self._loop.is_running():
+                asyncio.run_coroutine_threadsafe(_sub(), self._loop)
+        else:
+            # Already active, send current state immediately to the new subscriber
+            contract, ticker = self._active_tickers[symbol_upper]
+            import asyncio
+            async def _send_current():
+                quote_dict = self._format_quote(ticker)
+                try:
+                    callback(quote_dict)
+                except Exception:
+                    pass
+            if self._loop and self._loop.is_running():
+                asyncio.run_coroutine_threadsafe(_send_current(), self._loop)
+
+    def unsubscribe_ticker_updates(self, symbol: str, callback: Any) -> None:
+        """
+        Remove a callback. If no callbacks remain for the symbol, cancel the market data.
+        """
+        symbol_upper = symbol.strip().upper()
+        if symbol_upper in self._ticker_callbacks:
+            try:
+                self._ticker_callbacks[symbol_upper].remove(callback)
+            except ValueError:
+                pass
+            if not self._ticker_callbacks[symbol_upper]:
+                del self._ticker_callbacks[symbol_upper]
+                if symbol_upper in self._active_tickers:
+                    contract, ticker = self._active_tickers.pop(symbol_upper)
+                    import asyncio
+                    async def _unsub():
+                        self._ib.cancelMktData(contract)
+                    if self._loop and self._loop.is_running():
+                        asyncio.run_coroutine_threadsafe(_unsub(), self._loop)
+
+    def _on_pending_tickers(self, tickers):
+        for ticker in tickers:
+            symbol = ticker.contract.symbol
+            if symbol in self._ticker_callbacks:
+                quote_dict = self._format_quote(ticker)
+                for cb in self._ticker_callbacks[symbol]:
+                    try:
+                        cb(quote_dict)
+                    except Exception as e:
+                        logger.error(f"Error in ticker callback: {e}")
 
     def get_historical_data(
         self,
@@ -704,7 +835,8 @@ class IBService:
             raise
 
     def place_order(
-        self, symbol: str, action: str, quantity: float, order_type: str = "MKT", lmt_price: Optional[float] = None
+        self, symbol: str, action: str, quantity: float, order_type: str = "MKT", lmt_price: Optional[float] = None, outside_rth: bool = False,
+        take_profit_pct: Optional[float] = None, stop_loss_pct: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Place a buy or sell order after performing risk checks.
@@ -759,6 +891,8 @@ class IBService:
         contract = Stock(symbol_upper, "SMART", "USD")
         
         if order_type.upper() == "MKT":
+            if outside_rth:
+                raise ValueError("Extended hours trading requires a Limit (LMT) order")
             order = MarketOrder(action_upper, quantity)
         elif order_type.upper() == "LMT":
             if lmt_price is None:
@@ -766,6 +900,8 @@ class IBService:
             order = LimitOrder(action_upper, quantity, lmt_price)
         else:
             raise ValueError(f"Unsupported order type: {order_type}")
+
+        order.outsideRth = outside_rth
 
         import asyncio
 
@@ -775,8 +911,47 @@ class IBService:
             if not qualified:
                 raise RuntimeError(f"Could not qualify contract for {symbol_upper}")
             
-            # placeOrderAsync doesn't exist, placeOrder is synchronous but we can just call it
-            trade = self._ib.placeOrder(qualified[0], order)
+            resolved_contract = qualified[0]
+            
+            if take_profit_pct is not None or stop_loss_pct is not None:
+                # Need to use bracket order logic
+                parent_id = self._ib.client.getReqId()
+                order.orderId = parent_id
+                order.transmit = False
+                self._ib.placeOrder(resolved_contract, order)
+                
+                # We need a reference price to calculate absolute bracket prices
+                ref_price = current_price  # Already fetched during risk check
+                
+                if take_profit_pct is not None:
+                    tp_price = ref_price * (1 + take_profit_pct) if action_upper == "BUY" else ref_price * (1 - take_profit_pct)
+                    # Round to nearest 0.01
+                    tp_price = round(tp_price, 2)
+                    tp_action = "SELL" if action_upper == "BUY" else "BUY"
+                    tp_order = LimitOrder(tp_action, quantity, tp_price)
+                    tp_order.orderId = self._ib.client.getReqId()
+                    tp_order.parentId = parent_id
+                    tp_order.transmit = False  # Transmit false unless it's the last order
+                    # If there's no stop loss, this is the last one
+                    if stop_loss_pct is None:
+                        tp_order.transmit = True
+                    self._ib.placeOrder(resolved_contract, tp_order)
+                    
+                if stop_loss_pct is not None:
+                    sl_price = ref_price * (1 - stop_loss_pct) if action_upper == "BUY" else ref_price * (1 + stop_loss_pct)
+                    sl_price = round(sl_price, 2)
+                    sl_action = "SELL" if action_upper == "BUY" else "BUY"
+                    sl_order = StopOrder(sl_action, quantity, sl_price)
+                    sl_order.orderId = self._ib.client.getReqId()
+                    sl_order.parentId = parent_id
+                    sl_order.transmit = True # Last order transmits
+                    self._ib.placeOrder(resolved_contract, sl_order)
+                
+                # Fetch the trade object for the parent
+                trade = next((t for t in self._ib.trades() if getattr(t.order, "orderId", None) == parent_id), None)
+            else:
+                trade = self._ib.placeOrder(resolved_contract, order)
+            
             
             # Wait a tiny bit for the order to be submitted to the broker
             await asyncio.sleep(0.5)

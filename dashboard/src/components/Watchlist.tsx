@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiGet, apiPost, apiDelete, errorMessage } from '../api';
 import { useRefresh } from '../refresh';
+import { useLiveQuote } from '../useLiveQuote';
 
 // /watchlist costs ~2s per symbol on the IB event loop, so poll it far less
 // often than the shared 5s tick: 6 ticks ~= every 30s.
@@ -17,6 +18,58 @@ interface WatchlistItem {
     volume: number | null;
     error?: string;
 }
+
+const WatchlistRow = ({ item, onRemove }: { item: WatchlistItem; onRemove: (symbol: string) => void }) => {
+    const { quote, isConnected } = useLiveQuote(item.symbol);
+
+    const displayLast = quote?.last || item.last;
+    const displayBid = quote?.bid || item.bid;
+    const displayAsk = quote?.ask || item.ask;
+
+    return (
+        <tr>
+            <td style={{ fontWeight: '600' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: isConnected ? (quote ? '#10b981' : '#f59e0b') : 'transparent',
+                        boxShadow: isConnected && quote ? '0 0 4px #10b981' : 'none'
+                    }} title={isConnected ? 'Streaming Live' : ''} />
+                    {item.symbol}
+                </div>
+            </td>
+            <td>
+                {item.error ? (
+                    <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>Error</span>
+                ) : (
+                    <span style={{ color: '#10b981' }}>{displayLast?.toFixed(2) || '-'}</span>
+                )}
+            </td>
+            <td style={{ fontSize: '0.85rem', color: '#aaa' }}>
+                {displayBid?.toFixed(2) || '-'} / {displayAsk?.toFixed(2) || '-'}
+            </td>
+            <td>
+                <button
+                    onClick={() => onRemove(item.symbol)}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        padding: '0 4px',
+                        lineHeight: 1
+                    }}
+                    title="Remove"
+                >
+                    ×
+                </button>
+            </td>
+        </tr>
+    );
+};
 
 const Watchlist = () => {
     const [items, setItems] = useState<WatchlistItem[]>([]);
@@ -134,36 +187,7 @@ const Watchlist = () => {
                             </tr>
                         ) : (
                             items.map((item) => (
-                                <tr key={item.symbol}>
-                                    <td style={{ fontWeight: '600' }}>{item.symbol}</td>
-                                    <td>
-                                        {item.error ? (
-                                            <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>Error</span>
-                                        ) : (
-                                            <span style={{ color: '#10b981' }}>{item.last?.toFixed(2) || '-'}</span>
-                                        )}
-                                    </td>
-                                    <td style={{ fontSize: '0.85rem', color: '#aaa' }}>
-                                        {item.bid?.toFixed(2) || '-'} / {item.ask?.toFixed(2) || '-'}
-                                    </td>
-                                    <td>
-                                        <button
-                                            onClick={() => removeFromWatchlist(item.symbol)}
-                                            style={{
-                                                background: 'transparent',
-                                                border: 'none',
-                                                color: '#ef4444',
-                                                cursor: 'pointer',
-                                                fontSize: '1.2rem',
-                                                padding: '0 4px',
-                                                lineHeight: 1
-                                            }}
-                                            title="Remove"
-                                        >
-                                            ×
-                                        </button>
-                                    </td>
-                                </tr>
+                                <WatchlistRow key={item.symbol} item={item} onRemove={removeFromWatchlist} />
                             ))
                         )}
                     </tbody>

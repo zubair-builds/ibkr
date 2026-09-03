@@ -24,6 +24,7 @@ import TradeCenter from './components/TradeCenter';
 import HistoricalChart from './components/HistoricalChart';
 import PortfolioTable from './components/PortfolioTable';
 import Watchlist from './components/Watchlist';
+import AutopilotPanel from './components/AutopilotPanel';
 
 function App() {
   const [account, setAccount] = useState<AccountSummary>({});
@@ -130,6 +131,8 @@ function App() {
       {error && <div className="error-message">{error}</div>}
 
       <main className="dashboard-grid">
+        <AutopilotPanel />
+        
         {/* Account Summary Card */}
         <section className="card account-card">
             <h2>Account Summary</h2>

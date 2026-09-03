@@ -7,3 +7,4 @@ websockets
 pandas
 pyarrow
 requests
+google-genai

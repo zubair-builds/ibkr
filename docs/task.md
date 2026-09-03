@@ -1,36 +1,40 @@
 # IBKR Bot Task List (PM Framework)
 
-## 🔴 ACTIVE EPIC: Core Trading & Performance
-**Goal:** Ensure manual trading through the dashboard is 100% stable, responsive, and verifiable before introducing any automated AI behavior.
-
-- [ ] **Task 1.1: Order Modification & Cancellation UI**
-  - **DoD**: UI buttons exist to cancel pending orders or modify their limit prices. A canceled order immediately reflects in the History tab without page refresh.
-- [ ] **Task 1.2: Real-time Price Streaming (WebSockets)**
-  - **DoD**: Replace HTTP polling with WebSockets for live/delayed market data. The dashboard updates prices instantly without constant HTTP requests.
-
-
----
-
-## ⏸️ UPCOMING EPIC: AI Trading Brain
-**Goal:** Integrate Gemini to act as an intelligent agent that can read market data and propose trades.
-*(Do not start until Active Epic is complete)*
-
-- [ ] **Task 2.1: Data Formatting Service**
-  - **DoD**: Backend script that securely grabs portfolio state + recent market candles and formats it as an LLM-friendly JSON string.
-- [ ] **Task 2.2: Gemini API Integration**
-  - **DoD**: Backend endpoint that sends the context to Gemini and successfully parses its text response into a structured Buy/Sell/Hold signal.
-
----
-
-## ⏸️ UPCOMING EPIC: Full Automation & Analytics
+## 🔴 ACTIVE EPIC: Full Automation & Analytics
 **Goal:** Allow the bot to execute trades without human intervention and monitor its own performance.
 
-- [ ] **Task 3.1: Automated Trading Loop**
-  - **DoD**: A background task that runs every X minutes, evaluates the AI's signal, and executes the trade automatically.
+- [x] **Task 3.1A: Fix AI Context Data Mapping**
+  - **DoD**: The AI currently thinks there are no available funds despite the dashboard showing $1M+ in cash. We must fix `ai_context.py` to ensure `AvailableFunds` and `BuyingPower` are correctly parsed and explicitly understood by Gemini.
+- [x] **Task 3.1B: Manual AI Test Button**
+  - **DoD**: Add a "Test AI Analysis" button to the Autopilot panel. When clicked, it triggers the AI and displays the resulting `TradeSignal` (symbol, action, reasoning) *without* actually placing the order.
+- [x] **Task 3.1C: AI Harness & Pre-Trade Guard Rails**
+  - **DoD**: Implement strict guard rails (e.g., maximum order value, maximum open positions) that intercept the AI's signal and automatically block it if it violates risk parameters.
+- [ ] **Task 3.1D: Draft Orders for Manual Testing**
+  - **DoD**: Modify the Manual AI Test to submit the AI's signal to IBKR as a Draft order (`transmit=False`) with its bracket orders, so the user can manually review and transmit it in TWS.
+- [ ] **Task 3.1E: Targeted AI Analysis (Ticker Selection)**
+  - **DoD**: Add an input field/dropdown to the Manual Test UI so the user can force the AI to analyze a *specific* ticker (e.g., TSLA) rather than picking one from the entire portfolio context.
 - [ ] **Task 3.2: Notifications & Alerting (Discord/Slack)**
   - **DoD**: A webhook is triggered on every execution, pinging a chat app with the fill price and P&L.
 - [ ] **Task 3.3: Advanced Portfolio Analytics**
   - **DoD**: The dashboard contains a visual pie chart for asset allocation and a time-series graph for P&L tracking.
+
+we should add a section to the dashboard to display the AI's thinking process and the reasoning behind its decisions.
+
+## 🔍 OPEN ISSUES & REFINEMENTS FOR AUTOTRADE
+
+### 🔴 Autopilot (AI Trading)
+- [x] **Fix Guard Rail Logic**: Currently blocked BUY orders with "Invalid Price Data". Need to ensure we don't block valid trades due to temporary quote unavailability or data format nuances.
+- [x] **Add Stop Loss / Take Profit**: The "Buy" order should be accompanied by a contingent Stop Loss and Take Profit order to manage risk, as discussed.
+- [ ] **Context Builder Coverage**: Ensure `build_market_context` fetches data for all positions and watchlist symbols, not just those with open orders or in the watchlist.
+
+### 🟡 Market Maker (MM Strategy)
+- [ ] **Add Stop/Loss & T/P to MM Orders**: MM orders should also have intelligent Stop Loss and Take Profit orders attached to them.
+- [ ] **Improve Quote Reliability**: MM strategy relies heavily on "Last Price". Should we use "Ask Price" for BUYs and "Bid Price" for SELLs to be safer/faster? Or a combination?
+- [ ] **Handle Grid Adjustment**: Allow manual adjustment of the "Grid Size" (spread width) via the UI.
+
+### 🔵 General System
+- [ ] **IB Gateway / IBC Status**: The UI does not yet show the connection status (e.g., Connected to IB Gateway, Watchdog Active). This is critical for trust.
+- [ ] **Execution Log Fidelity**: The "Recent Executions" table should show the status (Filled, Cancelled) and ideally the time (HH:MM:SS).
 
 ---
 

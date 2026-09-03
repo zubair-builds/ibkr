@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { apiPost, errorMessage } from '../api';
 import { useRefresh } from '../refresh';
+import LiveQuote from './LiveQuote';
 
 interface Order {
+  orderId?: number;
   ticker: string;
   action: string;
   quantity: number;
@@ -27,8 +29,14 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
   const [orderType, setOrderType] = useState<'MKT' | 'LMT'>('LMT');
   const [quantity, setQuantity] = useState(1);
   const [lmtPrice, setLmtPrice] = useState('');
+  const [outsideRth, setOutsideRth] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tradeMessage, setTradeMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Edit State
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [editQty, setEditQty] = useState<number>(0);
+  const [editPrice, setEditPrice] = useState<string>('');
 
   const { refreshNow } = useRefresh();
 
@@ -49,7 +57,8 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
         action,
         quantity,
         order_type: orderType,
-        ...(orderType === 'LMT' ? { lmt_price: parseFloat(lmtPrice) } : {})
+        ...(orderType === 'LMT' ? { lmt_price: parseFloat(lmtPrice) } : {}),
+        outside_rth: orderType === 'LMT' ? outsideRth : false
       };
       await apiPost('/order', payload);
       setTradeMessage({ type: 'success', text: 'Order placed successfully!' });
@@ -62,6 +71,29 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
       setIsSubmitting(false);
     }
   };
+
+  const handleCancelOrder = async (orderId: number) => {
+      try {
+          await apiPost(`/order/${orderId}/cancel`, {});
+          refreshNow();
+      } catch (err) {
+          alert(errorMessage(err));
+      }
+  };
+
+  const handleModifySave = async (orderId: number) => {
+      try {
+          await apiPost(`/order/${orderId}/modify`, {
+              quantity: editQty,
+              lmt_price: editPrice ? parseFloat(editPrice) : null
+          });
+          setEditingOrderId(null);
+          refreshNow();
+      } catch (err) {
+          alert(errorMessage(err));
+      }
+  };
+
 
   return (
       <section className="card trade-center-card">
@@ -80,9 +112,10 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
             {activeTab === 'new' && (
                 <form className="new-trade-form" onSubmit={handlePlaceOrder}>
                     <div className="form-row">
-                        <div className="form-group">
+                        <div className="form-group" style={{ flex: 1 }}>
                             <label>Symbol</label>
                             <input type="text" value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder="AAPL" required className="modern-input" />
+                            <LiveQuote symbol={symbol} />
                         </div>
                         <div className="form-group action-toggle">
                             <label>Action</label>
@@ -111,6 +144,20 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
                                 <input type="number" min="0.01" step="0.01" value={lmtPrice} onChange={e => setLmtPrice(e.target.value)} required placeholder="0.00" className="modern-input" />
                             </div>
                         )}
+                    </div>
+
+                    <div className="form-row">
+                        <div className="form-group checkbox-group">
+                            <label className="checkbox-label" title="Only applies to Limit (LMT) orders">
+                                <input 
+                                    type="checkbox" 
+                                    checked={outsideRth} 
+                                    onChange={e => setOutsideRth(e.target.checked)} 
+                                    disabled={orderType === 'MKT'} 
+                                />
+                                Allow Extended Hours (Pre/Post Market)
+                            </label>
+                        </div>
                     </div>
                     
                     {tradeMessage && (
@@ -143,6 +190,7 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
                                     <th>Qty</th>
                                     <th>Status</th>
                                     <th>Filled</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -152,10 +200,42 @@ const TradeCenter = ({ orders }: TradeCenterProps) => {
                                         <td><strong>{order.ticker}</strong></td>
                                         <td><span className={`badge ${order.action.toLowerCase()}`}>{order.action}</span></td>
                                         <td>{order.orderType || '-'}</td>
-                                        <td>{order.lmtPrice ? `$${order.lmtPrice.toFixed(2)}` : '-'}</td>
-                                        <td>{order.quantity}</td>
+                                        {editingOrderId === order.orderId ? (
+                                            <>
+                                                <td>
+                                                    {order.orderType === 'LMT' ? (
+                                                        <input type="number" step="0.01" style={{width: '70px', padding: '2px'}} value={editPrice} onChange={e => setEditPrice(e.target.value)} />
+                                                    ) : (
+                                                        '-'
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <input type="number" step="1" style={{width: '60px', padding: '2px'}} value={editQty} onChange={e => setEditQty(parseInt(e.target.value) || 1)} />
+                                                </td>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <td>{order.lmtPrice ? `$${order.lmtPrice.toFixed(2)}` : '-'}</td>
+                                                <td>{order.quantity}</td>
+                                            </>
+                                        )}
                                         <td><span className={`status-pill ${order.status.toLowerCase()}`}>{order.status}</span></td>
                                         <td>{order.filled}/{order.quantity}</td>
+                                        <td className="actions-col" style={{ display: 'flex', gap: '5px' }}>
+                                            {editingOrderId === order.orderId ? (
+                                                <>
+                                                    <button style={{padding: '2px 5px', fontSize: '11px', backgroundColor: '#3b82f6'}} onClick={() => handleModifySave(order.orderId!)}>Save</button>
+                                                    <button style={{padding: '2px 5px', fontSize: '11px', backgroundColor: '#6b7280'}} onClick={() => setEditingOrderId(null)}>X</button>
+                                                </>
+                                            ) : (
+                                                order.orderId && (
+                                                    <>
+                                                        <button style={{padding: '2px 5px', fontSize: '11px', backgroundColor: '#3b82f6'}} onClick={() => { setEditingOrderId(order.orderId!); setEditQty(order.quantity); setEditPrice(order.lmtPrice ? order.lmtPrice.toString() : ''); }}>Mod</button>
+                                                        <button style={{padding: '2px 5px', fontSize: '11px', backgroundColor: '#ef4444'}} onClick={() => handleCancelOrder(order.orderId!)}>Cancel</button>
+                                                    </>
+                                                )
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

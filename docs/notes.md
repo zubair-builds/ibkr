@@ -1,5 +1,7 @@
 # IBKR Bot Notes & Reference
 
+python3 bot/main.py
+
 ## 🚀 Docker & Local Development
 verify docker app running
 docker-compose up -d --build

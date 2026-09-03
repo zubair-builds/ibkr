@@ -19,6 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bot.api import app  # noqa: E402
 from bot.ib_service import IBConfig, IBService  # noqa: E402
+from bot.autotrade import autotrade_manager  # noqa: E402
 
 
 def load_config():
@@ -57,10 +58,14 @@ async def lifespan(fastapi_app):
     # Attach service to app state for dependency injection in api.py
     fastapi_app.state.ib_service = ib_service
 
+    # Start the autotrade background loop task (will do nothing until enabled)
+    autotrade_manager.start(ib_service)
+
     try:
         yield
     finally:
         print("Stopping IBService and disconnecting from IBKR...")
+        autotrade_manager.stop()
         if ib_service is not None:
             ib_service.stop()
 
